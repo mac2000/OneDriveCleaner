@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OneDrive Cleaner</title>
+    <script crossorigin src="https://unpkg.com/@babel/standalone/babel.js"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <style>
+      a {
+        text-decoration: none;
+      }
+      a:hover {
+        text-decoration: underline;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>OneDrive Cleaner</h1>
+    <div id="root"></div>
+    <script type="text/babel" data-presets="react">
+      const formatMegabytes = new Intl.NumberFormat(undefined, { style: 'unit', unit: 'megabyte', unitDisplay: 'short', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format
+      const formatSize = size => formatMegabytes(size / 1024 / 1024)
+      function round(num, dec) {
+        return Math.round(num * Math.pow(10, dec)) / Math.pow(10, dec)
+      }
+      function mb(size) {
+        return size / 1024 / 1024
+      }
+      function Anonymous() {
+        return (
+          <div>
+            <p>
+              <a href="https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize?client_id=ba55dc5f-9b62-4574-9620-94da4787b0ba&scope=files.readwrite.all&response_type=token&redirect_uri=http://localhost:3000/">
+                Login
+              </a>
+            </p>
+            <p>Note: by intent only personal accounts are supported</p>
+            <p>
+              Demo link for enterprise accounts -{' '}
+              <a href="https://login.microsoftonline.com/9b4f9d80-4960-4dd3-88aa-199855e2759a/oauth2/v2.0/authorize?client_id=ba55dc5f-9b62-4574-9620-94da4787b0ba&scope=files.readwrite.all&response_type=token&redirect_uri=http://localhost:3000/">
+                Login
+              </a>
+            </p>
+          </div>
+        )
+      }
+      function Error({ error, error_description }) {
+        return (
+          <div>
+            <h2>{error}</h2>
+            <p>{error_description}</p>
+          </div>
+        )
+      }
+      const App = ({ headers }) => {
+        const [path, setPath] = React.useState([{ id: null, name: 'OneDrive' }])
+        const [prev, setPrev] = React.useState(null)
+        const [curr, setCurr] = React.useState(null)
+        const [hideSmallFiles, setHideSmallFiles] = React.useState(true)
+        const [items, setItems] = React.useState([])
+        const [sortBySize, setSortBySize] = React.useState(false)
+        React.useEffect(() => {
+          const url = path.length === 1 ? 'https://graph.microsoft.com/v1.0/me/drive/root/children' : `https://graph.microsoft.com/v1.0/me/drive/items/${path[path.length - 1].id}/children`
+          fetch(url, { headers })
+            .then(r => r.json())
+            .then(({ value }) => {
+              setItems(value)
+            })
+        }, [path])
+        const navigate = ({ id, name }) => {
+          setPath([...path, { id, name }])
+        }
+        const deleteItem = id => {
+          if (confirm('Are you sure?')) {
+            fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}`, { method: 'DELETE', headers }).then(() => {
+              setItems(items.filter(item => item.id !== id))
+            })
+          }
+        }
+        return (
+          <div>
+            <p>
+              {path.map(({ id, name }) => (
+                <span key={id}>
+                  <a href="#" onClick={() => setPath(path.slice(0, path.findIndex(p => p.id === id) + 1))}>
+                    {name}
+                  </a>
+                  {' / '}
+                </span>
+              ))}
+            </p>
+            <p>
+              <label>
+                <input type="checkbox" checked={hideSmallFiles} onChange={() => setHideSmallFiles(!hideSmallFiles)} />
+                hide small files
+              </label>
+              <label>
+                <input type="checkbox" checked={sortBySize} onChange={() => setSortBySize(!sortBySize)} />
+                sort by size
+              </label>
+            </p>
+            <table>
+              <thead>
+                <tr>
+                  <th>name</th>
+                  <th>size</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {items
+                  .filter(({ size }) => !hideSmallFiles || size > 1024 * 1024)
+                  .sort((a, b) => (sortBySize ? b.size - a.size : a.name.localeCompare(b.name)))
+                  .map(({ id, folder, name, size }) => (
+                    <tr key={id}>
+                      <td>
+                        {folder ? (
+                          <a href="#" onClick={() => navigate({ id, name })}>
+                            {name}
+                          </a>
+                        ) : (
+                          name
+                        )}
+                      </td>
+                      <td align="right">{formatSize(size)}</td>
+                      <td>
+                        <button onClick={() => deleteItem(id)}>&times;</button>
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        )
+      }
+      if (window.location.hash) {
+        const hash = new URLSearchParams(window.location.hash.substring(1))
+        if (hash.has('error')) {
+          ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(Error, { error: hash.get('error'), error_description: hash.get('error_description') }))
+        } else if (hash.has('access_token')) {
+          const headers = { authorization: `${hash.get('token_type')} ${hash.get('access_token')}` }
+          ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App, { headers }))
+        }
+      } else {
+        ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(Anonymous))
+      }
+      // // DELETE /me/drive/items/{item-id}
+    </script>
+  </body>
+</html>
